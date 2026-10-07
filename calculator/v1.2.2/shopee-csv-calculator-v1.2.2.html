@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shopee MY CSV Calculator v1.2.2</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;margin:0;background:#f5f6f8;color:#17202a}
+.wrap{max-width:1180px;margin:28px auto;padding:0 18px}
+.card{background:#fff;border:1px solid #e3e6ea;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 2px 10px #0000000a}
+h1{margin:0 0 8px}.muted{color:#667085}.ok{color:#067647}.err{color:#b42318}
+.filegrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.filebox{padding:16px;border:2px dashed #98a2b3;border-radius:10px;background:#fafafa}
+input[type=file]{width:100%;padding:8px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{padding:16px;border-radius:12px;background:#f8fafc;border:1px solid #e4e7ec}
+.label{font-size:12px;color:#667085}.value{font-size:22px;font-weight:700;margin-top:5px}
+table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #eaecf0;text-align:left;font-size:13px}
+th{background:#f8fafc}.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef2ff}
+.warn{background:#fffaeb;border-color:#fedf89}.good{background:#ecfdf3;border-color:#abefc6}
+.small{font-size:12px}
+@media(max-width:850px){.filegrid,.grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.filegrid,.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Shopee MY CSV Calculator v1.2.2</h1>
+    <p class="muted">Local-only. Load the Orders CSV, Items CSV, or both. The calculator never uploads the files.</p>
+
+    <div class="filegrid">
+      <div class="filebox">
+        <b>Orders CSV</b>
+        <p class="small muted">Required for spending totals.</p>
+        <input id="ordersFile" type="file" accept=".csv,text/csv">
+        <p id="ordersStatus" class="small muted"></p>
+      </div>
+
+      <div class="filebox">
+        <b>Items CSV</b>
+        <p class="small muted">Optional. Enables item/product analytics.</p>
+        <input id="itemsFile" type="file" accept=".csv,text/csv">
+        <p id="itemsStatus" class="small muted"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="quality" class="card" hidden></div>
+
+  <div id="dashboard" hidden>
+    <div class="grid">
+      <div class="stat"><div class="label">Unique Orders</div><div id="orders" class="value">0</div></div>
+      <div class="stat"><div class="label">Paid / Active Orders</div><div id="paidOrders" class="value">0</div></div>
+      <div class="stat"><div class="label">Total Spent</div><div id="spent" class="value">RM 0.00</div></div>
+      <div class="stat"><div class="label">Average Order</div><div id="avg" class="value">RM 0.00</div></div>
+      <div class="stat"><div class="label">Gross Units</div><div id="grossUnits" class="value">0</div></div>
+      <div class="stat"><div class="label">Returned Units</div><div id="returnedUnits" class="value">0</div></div>
+      <div class="stat"><div class="label">Net Units</div><div id="netUnits" class="value">0</div></div>
+      <div class="stat"><div class="label">Item Rows</div><div id="itemRows" class="value">0</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Status Breakdown</h2>
+      <table><thead><tr><th>Status</th><th>Orders</th><th>Order Total</th></tr></thead><tbody id="statuses"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Data Integrity</h2>
+      <table><tbody id="integrity"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>By Year</h2>
+      <table><thead><tr><th>Year</th><th>Orders</th><th>Total</th></tr></thead><tbody id="years"></tbody></table>
+    </div>
+
+    <div class="card" id="itemAnalyticsCard" hidden>
+      <h2>Top Products</h2>
+      <table><thead><tr><th>Product</th><th>Units</th><th>Line Value</th></tr></thead><tbody id="products"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Top Shops</h2>
+      <table><thead><tr><th>Shop</th><th>Orders</th><th>Total</th></tr></thead><tbody id="shops"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Order Preview</h2>
+      <table><thead><tr><th>Date</th><th>Order ID</th><th>Status</th><th>Shop</th><th>Final Total</th></tr></thead><tbody id="preview"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const money=n=>new Intl.NumberFormat('en-MY',{style:'currency',currency:'MYR'}).format(Number(n)||0);
+const num=v=>{const n=Number(String(v??'').replace(/RM\\s*/gi,'').replace(/,/g,'').trim());return Number.isFinite(n)?n:0};
+const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+
+function parseCSV(text){
+  // Robust CSV parser for Shopee exports: handles UTF-8 BOM, CRLF/LF,
+  // quoted fields, escaped double-quotes, commas inside quoted fields.
+  text=String(text ?? '').replace(/^\uFEFF/,'');
+  const rows=[];let row=[],cell='',quoted=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(quoted){
+      if(c==='"'){
+        if(text[i+1]==='"'){cell+='"';i++}
+        else quoted=false;
+      }else{
+        cell+=c;
+      }
+      continue;
+    }
+    if(c==='"') quoted=true;
+    else if(c===','){row.push(cell);cell='';}
+    else if(c==='\n'){
+      row.push(cell);rows.push(row);row=[];cell='';
+    }else if(c!=='\r'){
+      cell+=c;
+    }
+  }
+  if(cell!==''||row.length){
+    row.push(cell);
+    rows.push(row);
+  }
+  const headers=(rows.shift()||[]).map(x=>String(x).trim());
+  return rows
+    .filter(r=>r.some(v=>String(v??'').trim()!==''))
+    .map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]??''])));
+}
+
+function yearOf(v){
+  const m=String(v||'').match(/(?:^|\\D)(20\\d{2})(?:\\D|$)/);
+  return m?m[1]:'Unknown';
+}
+
+let orders=null,items=null;
+
+function recalc(){
+  if(!orders)return;
+
+  const valid=orders.filter(r=>r['Order ID']);
+  const ids=new Set(valid.map(r=>r['Order ID']));
+  const duplicates=valid.length-ids.size;
+
+  const paidStatuses=new Set(['Completed','To Ship','To Receive']);
+  const paid=valid.filter(r=>paidStatuses.has(r['Order Status']));
+  const spent=paid.reduce((s,r)=>s+num(r['Order Net Paid']||r['Order Final Total']),0);
+
+  document.querySelector('#dashboard').hidden=false;
+  document.querySelector('#orders').textContent=valid.length.toLocaleString();
+  document.querySelector('#paidOrders').textContent=paid.length.toLocaleString();
+  document.querySelector('#spent').textContent=money(spent);
+  document.querySelector('#avg').textContent=money(paid.length?spent/paid.length:0);
+
+  const statusMap=new Map();
+  for(const r of valid){
+    const st=r['Order Status']||'Unknown';
+    if(!statusMap.has(st))statusMap.set(st,{orders:0,total:0});
+    statusMap.get(st).orders++;
+    statusMap.get(st).total+=num(r['Order Net Paid']||r['Order Final Total']);
+  }
+  document.querySelector('#statuses').innerHTML=[...statusMap.entries()]
+    .sort((a,b)=>b[1].total-a[1].total)
+    .map(([s,v])=>`<tr><td>${esc(s)}</td><td>${v.orders.toLocaleString()}</td><td>${money(v.total)}</td></tr>`).join('');
+
+  const missingDates=valid.filter(r=>!String(r['Order Date']||'').trim()).length;
+  const byYear=new Map(),byShop=new Map();
+  for(const r of paid){
+    const y=yearOf(r['Order Date']);
+    const total=num(r['Order Net Paid']||r['Order Final Total']);
+    if(!byYear.has(y))byYear.set(y,{orders:0,total:0});
+    byYear.get(y).orders++;byYear.get(y).total+=total;
+    const shop=r['Shop']||'Unknown';
+    if(!byShop.has(shop))byShop.set(shop,{orders:0,total:0});
+    byShop.get(shop).orders++;byShop.get(shop).total+=total;
+  }
+
+  document.querySelector('#years').innerHTML=[...byYear.entries()].sort((a,b)=>String(b[0]).localeCompare(String(a[0])))
+    .map(([y,v])=>`<tr><td>${esc(y)}</td><td>${v.orders.toLocaleString()}</td><td>${money(v.total)}</td></tr>`).join('');
+
+  document.querySelector('#shops').innerHTML=[...byShop.entries()].sort((a,b)=>b[1].total-a[1].total).slice(0,25)
+    .map(([s,v])=>`<tr><td>${esc(s)}</td><td>${v.orders.toLocaleString()}</td><td>${money(v.total)}</td></tr>`).join('');
+
+  document.querySelector('#preview').innerHTML=paid.slice(0,50)
+    .map(r=>`<tr><td>${esc(r['Order Date'])}</td><td>${esc(r['Order ID'])}</td><td><span class="badge">${esc(r['Order Status'])}</span></td><td>${esc(r['Shop'])}</td><td>${money(num(r['Order Net Paid']||r['Order Final Total']))}</td></tr>`).join('');
+
+  let gross=0,returned=0,net=0,relationMissing=0;
+  if(items){
+    const itemOrderIds=new Set(items.map(r=>r['Order ID']).filter(Boolean));
+    relationMissing=[...itemOrderIds].filter(id=>!ids.has(id)).length;
+    for(const r of items){
+      const q=num(r['Quantity']);
+      gross+=q;
+      if(String(r['Returned']).toLowerCase()==='yes')returned+=q;
+    }
+    net=gross-returned;
+    document.querySelector('#itemAnalyticsCard').hidden=false;
+    document.querySelector('#itemRows').textContent=items.length.toLocaleString();
+    document.querySelector('#grossUnits').textContent=gross.toLocaleString();
+    document.querySelector('#returnedUnits').textContent=returned.toLocaleString();
+    document.querySelector('#netUnits').textContent=net.toLocaleString();
+
+    const prod=new Map();
+    for(const r of items){
+      if(String(r['Order Status'])==='Cancelled')continue;
+      const name=r['Item Name']||'Unknown';
+      if(!prod.has(name))prod.set(name,{units:0,value:0});
+      prod.get(name).units+=num(r['Quantity']);
+      prod.get(name).value+=num(r['Line Price']);
+    }
+    document.querySelector('#products').innerHTML=[...prod.entries()].sort((a,b)=>b[1].units-a[1].units).slice(0,25)
+      .map(([p,v])=>`<tr><td>${esc(p)}</td><td>${v.units.toLocaleString()}</td><td>${money(v.value)}</td></tr>`).join('');
+  }
+
+  document.querySelector('#integrity').innerHTML=[
+    ['Unique Order IDs',ids.size,ids.size===valid.length],
+    ['Duplicate Order IDs',duplicates,duplicates===0],
+    ['Orders with missing Order Date',missingDates,missingDates===0],
+    ['Item rows loaded',items?items.length:'Not loaded',true],
+    ['Item Order IDs not found in Orders',items?relationMissing:'Not checked',!items||relationMissing===0]
+  ].map(([k,v,ok])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td><td class="${ok?'ok':'err'}">${ok?'OK':'CHECK'}</td></tr>`).join('');
+}
+
+async function loadFile(file,kind){
+  const text=await file.text();
+  const rows=parseCSV(text);
+  if(!rows.length){
+    const preview=String(text).replace(/^\uFEFF/,'').slice(0,180).replace(/\s+/g,' ');
+    throw new Error(`CSV kosong / parser gagal membaca baris data. Preview: ${preview}`);
+  }
+  if(kind==='orders'){
+    if(!('Order ID' in rows[0])||!('Order Final Total' in rows[0]))throw new Error('Ini bukan Orders CSV yang disokong.');
+    orders=rows;
+    document.querySelector('#ordersStatus').innerHTML=`<span class="ok">Loaded ${rows.length.toLocaleString()} order rows.</span>`;
+  }else{
+    if(!('Order ID' in rows[0])||!('Item Name' in rows[0])||!('Quantity' in rows[0]))throw new Error('Ini bukan Items CSV yang disokong.');
+    items=rows;
+    document.querySelector('#itemsStatus').innerHTML=`<span class="ok">Loaded ${rows.length.toLocaleString()} item rows.</span>`;
+  }
+  recalc();
+}
+
+document.querySelector('#ordersFile').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{await loadFile(f,'orders')}catch(err){document.querySelector('#ordersStatus').innerHTML=`<span class="err">Error: ${esc(err.message)}</span>`}
+});
+document.querySelector('#itemsFile').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{await loadFile(f,'items')}catch(err){document.querySelector('#itemsStatus').innerHTML=`<span class="err">Error: ${esc(err.message)}</span>`}
+});
+</script>
+</body>
+</html>
