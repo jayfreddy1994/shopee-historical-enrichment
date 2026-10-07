@@ -1,0 +1,12 @@
+theme: jekyll-theme-cayman
+
+title: "Shopee Historical Enrichment"
+description: "A read-only browser-based research utility for inspecting and enriching a user's own Shopee order-history data."
+
+url: "https://jayfreddy1994.github.io"
+baseurl: "/shopee-historical-enrichment"
+
+markdown: kramdown
+
+github:
+  repository_url: "https://github.com/jayfreddy1994/shopee-historical-enrichment"
