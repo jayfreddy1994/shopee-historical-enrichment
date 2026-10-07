@@ -84,3 +84,46 @@ TRUE Order Creation Timestamp
 Historical Enriched Dataset
         ↓
 JSON + CSV
+
+---
+
+## ☕ Optional Support
+
+If this project is useful for your research, learning, or data-analysis work, optional support is appreciated.
+
+### ☕ Ko-fi
+
+[Support on Ko-fi](https://ko-fi.com/jayfreddy)
+
+Other links:
+
+- [🌐 Solo.to](https://solo.to/jayfreddy)
+- [💬 Sociabuzz](https://sociabuzz.com/jayfreddy)
+
+Support is completely optional and is not required to use the project.
+
+---
+
+## ⚠️ Disclaimer
+
+This is an independent third-party research project.
+
+[Read the full Disclaimer](disclaimer)
+
+---
+
+## Project Status
+
+**Research / Experimental**
+
+The project may change as research continues and as Shopee's consumer web changes.
+
+`shopee-historical-enrichment` is maintained by `jayfreddy1994`.
+
+---
+
+### Acknowledgement
+
+This project was developed by JF-CCTV-X7, with assistance from ChatGPT for research, analysis, documentation, problem-solving, and development support.
+
+---
