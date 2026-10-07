@@ -109,7 +109,7 @@ Support is completely optional and is not required to use the project.
 
 This is an independent third-party research project.
 
-[Read the full Disclaimer](disclaimer)
+[Read the full Disclaimer](DISCLAIMER)
 
 ---
 
